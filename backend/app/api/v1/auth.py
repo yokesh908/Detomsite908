@@ -2,7 +2,8 @@
 Authentication API routes
 """
 from fastapi import APIRouter, HTTPException, Depends, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer
+from fastapi.security.http import HTTPAuthorizationCredentials
 from app.schemas import UserRegister, UserLogin, UserResponse, TokenResponse, UserRole
 from app.services import (
     authenticate_user, register_user, create_tokens, update_user_password
@@ -19,7 +20,7 @@ router = APIRouter()
 security = HTTPBearer()
 
 
-async def get_current_user(credentials: HTTPAuthCredentials = Depends(security)) -> User:
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
     """Get current authenticated user from JWT token"""
     token = credentials.credentials
     payload = decode_token(token)
