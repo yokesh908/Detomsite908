@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "app/main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "app/main.py"
+    }
+  ],
+  "env": {
+    "USE_LOCAL_DB": "False",
+    "MONGODB_URL": "@MONGODB_URL",
+    "DATABASE_NAME": "@DATABASE_NAME",
+    "REDIS_URL": "@REDIS_URL",
+    "JWT_SECRET": "@JWT_SECRET",
+    "FRONTEND_URL": "@FRONTEND_URL",
+    "BACKEND_URL": "@BACKEND_URL",
+    "DEFAULT_SUPER_ADMIN_EMAIL": "@DEFAULT_SUPER_ADMIN_EMAIL",
+    "DEFAULT_SUPER_ADMIN_PASSWORD": "@DEFAULT_SUPER_ADMIN_PASSWORD",
+    "ALLOWED_ORIGINS": "@ALLOWED_ORIGINS",
+    "RAZORPAY_KEY_ID": "@RAZORPAY_KEY_ID",
+    "RAZORPAY_KEY_SECRET": "@RAZORPAY_KEY_SECRET"
+  }
+}

@@ -1,0 +1,126 @@
+/* App Styles - Emerald and Shining Gold Theme */
+:root {
+  --primary: #064e3b;
+  --primary-light: #0f8f62;
+  --secondary: #ffd76a;
+  --secondary-light: #fff0a8;
+  --gold-deep: #b7791f;
+  --background: #fffaf0;
+  --surface: #fffdf5;
+  --text-dark: #1b5e20;
+  --text-light: #666;
+  --border: #2e7d32;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 220, 113, 0.42), transparent 34%),
+    radial-gradient(circle at 88% 12%, rgba(10, 129, 83, 0.16), transparent 28%),
+    linear-gradient(135deg, #fffaf0 0%, #f9fff8 52%, #fff4c8 100%);
+  color: var(--text-dark);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Green & Gold Accents */
+button:hover, a:hover {
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+  border: 2px solid var(--border);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-light);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.btn-secondary {
+  background-color: var(--secondary);
+  color: var(--text-dark);
+  border: 2px solid var(--secondary);
+  font-weight: bold;
+}
+
+.btn-secondary:hover {
+  background-color: var(--secondary-light);
+  transform: translateY(-2px);
+}
+
+.card {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: white;
+}
+
+.gold-border {
+  border: 3px solid var(--secondary);
+  border-radius: 12px;
+  padding: 1rem;
+  background: linear-gradient(135deg, #f8faf6 0%, #ffffff 100%);
+}
+
+.gold-sheen {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 213, 0.92)),
+    linear-gradient(90deg, rgba(255, 215, 106, 0.28), rgba(255, 255, 255, 0.1), rgba(183, 121, 31, 0.18));
+  box-shadow:
+    0 18px 50px rgba(119, 82, 14, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.gold-sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.55) 42%, transparent 62%);
+  transform: translateX(-130%);
+  animation: gold-shine 5.5s ease-in-out infinite;
+}
+
+.gold-button {
+  background: linear-gradient(135deg, #fff0a8 0%, #ffd76a 42%, #c9892b 100%);
+  border-color: #b7791f;
+  color: #173c2a;
+  box-shadow: 0 8px 24px rgba(183, 121, 31, 0.28);
+}
+
+.gold-button:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+
+.gold-text {
+  background: linear-gradient(135deg, #fff4b8 0%, #d99b2b 42%, #7a4b11 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes gold-shine {
+  0%, 45% {
+    transform: translateX(-130%);
+  }
+  75%, 100% {
+    transform: translateX(130%);
+  }
+}
