@@ -30,7 +30,7 @@ async def connect_to_mongo():
         
         await init_beanie(
             database=database,
-            models=[
+            document_models=[
                 User, Campus, Shop, Product, Category, Order,
                 Payment, Review, Notification, Ticket, AuditLog,
                 Wallet, DeliveryPartner, FeatureFlag, Setting
