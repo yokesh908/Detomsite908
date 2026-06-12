@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 def _use_mongo() -> bool:
-    return not settings.USE_LOCAL_DB
+    return not settings.USE_LOCAL_DB and not settings.USE_TURSO_DB
 
 
 @router.get("/status")
@@ -23,6 +23,14 @@ async def database_status():
             "database": "MongoDB Atlas",
             "persistent": True,
             "message": "MongoDB is active for production data.",
+        }
+    if settings.USE_TURSO_DB:
+        return {
+            "connected": True,
+            "mode": "turso",
+            "database": "Turso/libSQL",
+            "persistent": True,
+            "message": "Turso is active. Business data is stored in a persistent cloud database.",
         }
     return {
         "connected": True,

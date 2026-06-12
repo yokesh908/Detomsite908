@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     
     # Database
     USE_LOCAL_DB: bool = True
+    USE_TURSO_DB: bool = False
     LOCAL_DB_PATH: str = "detomsite_local.db"
+    TURSO_DATABASE_URL: str = ""
+    TURSO_AUTH_TOKEN: str = ""
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "detomsite"
     SEED_DEMO_DATA: bool = False
@@ -84,11 +87,16 @@ class Settings(BaseSettings):
             if origin and origin not in self.ALLOWED_ORIGINS:
                 self.ALLOWED_ORIGINS.append(origin)
 
-        if self.USE_LOCAL_DB:
+        if self.USE_LOCAL_DB and not self.USE_TURSO_DB:
             return self
 
         missing = []
-        if not self.MONGODB_URL or self.MONGODB_URL == "mongodb://localhost:27017":
+        if self.USE_TURSO_DB:
+            if not self.TURSO_DATABASE_URL:
+                missing.append("TURSO_DATABASE_URL")
+            if not self.TURSO_AUTH_TOKEN:
+                missing.append("TURSO_AUTH_TOKEN")
+        elif not self.MONGODB_URL or self.MONGODB_URL == "mongodb://localhost:27017":
             missing.append("MONGODB_URL")
         if not self.DATABASE_NAME:
             missing.append("DATABASE_NAME")

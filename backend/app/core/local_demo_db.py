@@ -14,6 +14,69 @@ from typing import Any
 from app.core.config import settings
 
 
+class _NamedRow(dict):
+    def __init__(self, columns: list[str], values: Any):
+        super().__init__(zip(columns, values))
+        self._values = tuple(values)
+
+    def __getitem__(self, key: Any) -> Any:
+        if isinstance(key, int):
+            return self._values[key]
+        return super().__getitem__(key)
+
+
+class _NamedRowCursor:
+    def __init__(self, cursor: Any):
+        self._cursor = cursor
+
+    def _row_to_dict(self, row: Any) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        columns = [column[0] for column in self._cursor.description or []]
+        if not columns:
+            return row
+        return _NamedRow(columns, row)
+
+    @property
+    def lastrowid(self) -> Any:
+        return getattr(self._cursor, "lastrowid", None)
+
+    def fetchone(self) -> dict[str, Any] | None:
+        return self._row_to_dict(self._cursor.fetchone())
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return [self._row_to_dict(row) for row in self._cursor.fetchall()]
+
+
+class _NamedRowConnection:
+    def __init__(self, connection: Any):
+        self._connection = connection
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        if exc_type is None:
+            self._connection.commit()
+        self._connection.close()
+        return False
+
+    def execute(self, *args, **kwargs) -> _NamedRowCursor:
+        return _NamedRowCursor(self._connection.execute(*args, **kwargs))
+
+    def executemany(self, *args, **kwargs) -> _NamedRowCursor:
+        return _NamedRowCursor(self._connection.executemany(*args, **kwargs))
+
+    def executescript(self, *args, **kwargs) -> _NamedRowCursor:
+        return _NamedRowCursor(self._connection.executescript(*args, **kwargs))
+
+    def commit(self) -> None:
+        self._connection.commit()
+
+    def close(self) -> None:
+        self._connection.close()
+
+
 def _db_path() -> Path:
     path = Path(settings.LOCAL_DB_PATH)
     if not path.is_absolute():
@@ -21,7 +84,17 @@ def _db_path() -> Path:
     return path
 
 
-def _connect() -> sqlite3.Connection:
+def _connect() -> Any:
+    if settings.USE_TURSO_DB:
+        import libsql
+
+        return _NamedRowConnection(
+            libsql.connect(
+                settings.TURSO_DATABASE_URL,
+                auth_token=settings.TURSO_AUTH_TOKEN,
+            )
+        )
+
     connection = sqlite3.connect(_db_path())
     connection.row_factory = sqlite3.Row
     return connection
@@ -514,7 +587,7 @@ def create_notification(
     message: str,
     order_id: str | None = None,
     status: str | None = None,
-    connection: sqlite3.Connection | None = None,
+    connection: Any | None = None,
 ) -> dict[str, Any] | None:
     owns_connection = connection is None
     active_connection = connection or _connect()

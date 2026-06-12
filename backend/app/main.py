@@ -29,7 +29,11 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
     # Startup
     logger.info("Starting DETOMSITE application")
-    if settings.USE_LOCAL_DB:
+    if settings.USE_TURSO_DB:
+        from app.core.local_demo_db import init_local_demo_db
+        init_local_demo_db()
+        logger.info("Turso database initialized")
+    elif settings.USE_LOCAL_DB:
         from app.core.local_demo_db import init_local_demo_db
         init_local_demo_db()
         logger.info("Local SQLite database initialized")
@@ -49,7 +53,7 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down DETOMSITE application")
-    if not settings.USE_LOCAL_DB:
+    if not settings.USE_LOCAL_DB and not settings.USE_TURSO_DB:
         from app.core.database import close_mongo_connection
         await close_mongo_connection()
 
@@ -86,7 +90,7 @@ app.include_router(
     tags=["Local Runnable API"]
 )
 
-if not settings.USE_LOCAL_DB:
+if not settings.USE_LOCAL_DB and not settings.USE_TURSO_DB:
     from app.api.v1 import auth, users, campuses, shops, products, orders, payments, reviews, tickets, admin, admin_super
 
     app.include_router(

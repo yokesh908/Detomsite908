@@ -89,7 +89,7 @@ export interface LocalSummary {
 
 export interface LocalDatabaseStatus {
   connected: boolean
-  mode: 'mongo' | 'demo'
+  mode: 'mongo' | 'turso' | 'demo'
   database: string
   persistent: boolean
   message: string
