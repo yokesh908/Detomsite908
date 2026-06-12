@@ -48,7 +48,11 @@ export const MainLayout: React.FC<LayoutProps> = ({
     { path: '/', label: 'Home' },
     { path: '/shops', label: 'Shops' },
     {
-      path: session?.role === 'shopkeeper' ? '/shopkeeper-dashboard' : '/customer-dashboard',
+      path: session?.role === 'admin'
+        ? '/admin-dashboard'
+        : session?.role === 'shopkeeper'
+          ? '/shopkeeper-dashboard'
+          : '/customer-dashboard',
       label: 'Dashboard',
     },
     { path: '/cart', label: `Cart${cartCount ? ` (${cartCount})` : ''}` },
@@ -151,7 +155,7 @@ export const MainLayout: React.FC<LayoutProps> = ({
             </div>
             {session && (
               <div className="ml-2 flex items-center gap-2 rounded-lg border-2 border-yellow-500 bg-white/75 px-3 py-2 text-sm font-bold text-green-800">
-                <span>{session.role === 'student' ? 'Student' : 'Shopkeeper'}</span>
+                <span>{session.role === 'admin' ? 'Admin' : session.role === 'student' ? 'Student' : 'Shopkeeper'}</span>
                 <span className="max-w-[150px] truncate">{session.email}</span>
                 <button
                   type="button"

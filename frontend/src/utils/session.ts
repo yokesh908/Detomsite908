@@ -1,4 +1,4 @@
-export type UserRoleChoice = 'student' | 'shopkeeper'
+export type UserRoleChoice = 'student' | 'shopkeeper' | 'admin'
 
 export interface LocalSession {
   role: UserRoleChoice

@@ -35,7 +35,7 @@ export function RoleGate({ children }: RoleGateProps) {
     event.preventDefault()
     const session = {
       role,
-      name: name.trim() || (role === 'student' ? 'Student' : 'Shopkeeper'),
+      name: name.trim() || (role === 'admin' ? 'Admin' : role === 'student' ? 'Student' : 'Shopkeeper'),
       email: email.trim(),
       phone: phone.trim(),
       campus: role === 'student' ? campus.trim() : undefined,
@@ -46,7 +46,7 @@ export function RoleGate({ children }: RoleGateProps) {
     saveLocalSession(session)
     void saveSessionToBackend(session)
     setHasSession(true)
-    navigate(role === 'student' ? '/shops' : '/shopkeeper-dashboard')
+    navigate(role === 'admin' ? '/admin-dashboard' : role === 'student' ? '/shops' : '/shopkeeper-dashboard')
   }
 
   if (hasSession) return <>{children}</>
@@ -83,8 +83,8 @@ export function RoleGate({ children }: RoleGateProps) {
           <h2 className="mb-6 text-3xl font-black text-green-950">Continue as</h2>
 
           <form onSubmit={handleStart} className="space-y-5">
-            <div className="grid grid-cols-2 gap-3">
-              {(['student', 'shopkeeper'] as UserRoleChoice[]).map(option => (
+            <div className="grid grid-cols-3 gap-3">
+              {(['student', 'shopkeeper', 'admin'] as UserRoleChoice[]).map(option => (
                 <button
                   key={option}
                   type="button"
@@ -95,7 +95,7 @@ export function RoleGate({ children }: RoleGateProps) {
                       : 'border-yellow-500 bg-white/85 text-green-900 hover:bg-yellow-50'
                   }`}
                 >
-                  {option === 'student' ? 'Student' : 'Shopkeeper'}
+                  {option === 'admin' ? 'Admin' : option === 'student' ? 'Student' : 'Shopkeeper'}
                 </button>
               ))}
             </div>
@@ -106,7 +106,7 @@ export function RoleGate({ children }: RoleGateProps) {
                 value={name}
                 onChange={event => setName(event.target.value)}
                 className="w-full rounded-lg border-2 border-yellow-600 bg-white px-4 py-3 text-green-950 outline-none focus:ring-2 focus:ring-yellow-400"
-                placeholder={role === 'student' ? 'Student name' : 'Shopkeeper name'}
+                placeholder={role === 'admin' ? 'Admin name' : role === 'student' ? 'Student name' : 'Shopkeeper name'}
               />
             </div>
 
@@ -130,7 +130,7 @@ export function RoleGate({ children }: RoleGateProps) {
                   onChange={event => setPhone(event.target.value)}
                   className="w-full rounded-lg border-2 border-yellow-600 bg-white px-4 py-3 text-green-950 outline-none focus:ring-2 focus:ring-yellow-400"
                   placeholder="Phone number"
-                  required
+                  required={role !== 'admin'}
                 />
               </div>
 
@@ -147,7 +147,11 @@ export function RoleGate({ children }: RoleGateProps) {
               </div>
             </div>
 
-            {role === 'student' ? (
+            {role === 'admin' ? (
+              <div className="rounded-lg border-2 border-yellow-500 bg-white/80 p-4">
+                <p className="text-sm font-black text-green-950">Admin control opens approvals, payments, shop status, and database status.</p>
+              </div>
+            ) : role === 'student' ? (
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-black text-green-900">Campus</label>

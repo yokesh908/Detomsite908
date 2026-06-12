@@ -14,6 +14,25 @@ def _use_mongo() -> bool:
     return not settings.USE_LOCAL_DB
 
 
+@router.get("/status")
+async def database_status():
+    if _use_mongo():
+        return {
+            "connected": True,
+            "mode": "mongo",
+            "database": "MongoDB Atlas",
+            "persistent": True,
+            "message": "MongoDB is active for production data.",
+        }
+    return {
+        "connected": True,
+        "mode": "demo",
+        "database": "SQLite demo database",
+        "persistent": False,
+        "message": "Demo database is active. Data can reset after redeploy or server restart.",
+    }
+
+
 class LocalSessionCreate(BaseModel):
     email: EmailStr
     name: str

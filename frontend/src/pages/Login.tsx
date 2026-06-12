@@ -18,13 +18,13 @@ export function Login() {
     const session = {
       role,
       email,
-      name: savedSession?.name || (role === 'student' ? 'Student' : 'Shopkeeper'),
+      name: savedSession?.name || (role === 'admin' ? 'Admin' : role === 'student' ? 'Student' : 'Shopkeeper'),
     }
     saveLocalSession(session)
     void saveSessionToBackend(session)
     setTimeout(() => {
       setLoading(false)
-      navigate(role === 'student' ? '/customer-dashboard' : '/shopkeeper-dashboard')
+      navigate(role === 'admin' ? '/admin-dashboard' : role === 'student' ? '/customer-dashboard' : '/shopkeeper-dashboard')
     }, 400)
   }
 
@@ -39,8 +39,8 @@ export function Login() {
             </p>
 
             <form onSubmit={handleLogin} className="space-y-5">
-              <div className="grid grid-cols-2 gap-3">
-                {(['student', 'shopkeeper'] as UserRoleChoice[]).map(option => (
+              <div className="grid grid-cols-3 gap-3">
+                {(['student', 'shopkeeper', 'admin'] as UserRoleChoice[]).map(option => (
                   <button
                     key={option}
                     type="button"
@@ -51,7 +51,7 @@ export function Login() {
                         : 'border-green-700 bg-green-50 text-green-800 hover:bg-green-100'
                     }`}
                   >
-                    {option === 'student' ? 'Student' : 'Shopkeeper'}
+                    {option === 'admin' ? 'Admin' : option === 'student' ? 'Student' : 'Shopkeeper'}
                   </button>
                 ))}
               </div>

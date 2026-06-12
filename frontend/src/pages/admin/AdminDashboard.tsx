@@ -1,27 +1,51 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MainLayout } from '../../components/Layout'
 import api from '../../services/api'
-import { LocalOrder, LocalPayment, LocalProduct, LocalShop } from '../../types/localApi'
+import {
+  LocalDatabaseStatus,
+  LocalOrder,
+  LocalPayment,
+  LocalProduct,
+  LocalShop,
+  LocalSummary,
+} from '../../types/localApi'
+import { getLocalSession } from '../../utils/session'
+
+const money = (value: number) => `₹${value.toLocaleString('en-IN')}`
 
 export function AdminDashboard() {
   const [shops, setShops] = useState<LocalShop[]>([])
   const [products, setProducts] = useState<LocalProduct[]>([])
   const [orders, setOrders] = useState<LocalOrder[]>([])
   const [payments, setPayments] = useState<LocalPayment[]>([])
+  const [summary, setSummary] = useState<LocalSummary | null>(null)
+  const [databaseStatus, setDatabaseStatus] = useState<LocalDatabaseStatus | null>(null)
   const [manualFallback, setManualFallback] = useState(false)
   const [message, setMessage] = useState('')
+  const [loadError, setLoadError] = useState('')
+
+  const session = getLocalSession()
 
   const loadAdmin = async () => {
-    const [shopsResponse, productsResponse, ordersResponse, paymentsResponse] = await Promise.all([
-      api.get<LocalShop[]>('/local/shops'),
-      api.get<LocalProduct[]>('/local/products'),
-      api.get<LocalOrder[]>('/local/orders'),
-      api.get<LocalPayment[]>('/local/payments'),
-    ])
-    setShops(shopsResponse.data)
-    setProducts(productsResponse.data)
-    setOrders(ordersResponse.data)
-    setPayments(paymentsResponse.data)
+    setLoadError('')
+    try {
+      const [shopsResponse, productsResponse, ordersResponse, paymentsResponse, summaryResponse, statusResponse] = await Promise.all([
+        api.get<LocalShop[]>('/local/shops'),
+        api.get<LocalProduct[]>('/local/products'),
+        api.get<LocalOrder[]>('/local/orders'),
+        api.get<LocalPayment[]>('/local/payments'),
+        api.get<LocalSummary>('/local/summary'),
+        api.get<LocalDatabaseStatus>('/local/status'),
+      ])
+      setShops(shopsResponse.data)
+      setProducts(productsResponse.data)
+      setOrders(ordersResponse.data)
+      setPayments(paymentsResponse.data)
+      setSummary(summaryResponse.data)
+      setDatabaseStatus(statusResponse.data)
+    } catch {
+      setLoadError('Backend is not reachable. Check the API deployment and database settings.')
+    }
   }
 
   useEffect(() => {
@@ -33,10 +57,11 @@ export function AdminDashboard() {
   const activeShops = shops.filter(shop => shop.approval_status === 'Approved' && shop.present && shop.status === 'Open')
   const pendingPrices = products.filter(product => product.pending_price)
   const pendingPayments = payments.filter(payment => payment.status === 'Pending Verification')
-  const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0)
+  const totalRevenue = summary?.revenue ?? orders.reduce((sum, order) => sum + order.total, 0)
   const totalCommission = Math.round(totalRevenue * 0.05)
   const gatewayFees = Math.round(totalRevenue * 0.02)
   const vendorRevenue = totalRevenue - totalCommission - gatewayFees
+  const reviewCount = pendingShops.length + pendingPrices.length + pendingPayments.length
 
   const shopById = useMemo(() => (
     Object.fromEntries(shops.map(shop => [shop.id, shop]))
@@ -72,128 +97,170 @@ export function AdminDashboard() {
 
   return (
     <MainLayout>
-      <div className="min-h-screen bg-[#fff7e6] px-4 py-10">
-        <div className="mx-auto max-w-6xl">
-          <div className="gold-sheen mb-8 rounded-lg border-4 border-yellow-500 p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h1 className="text-4xl font-black text-green-950">Admin Dashboard</h1>
-                <p className="mt-2 font-bold text-green-800">Approvals, prices, orders, payments</p>
+      <div className="min-h-screen bg-[#f8fbf6] px-3 py-5 text-green-950 sm:px-4">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-4 grid gap-4 lg:grid-cols-[1fr_320px]">
+            <section className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase text-yellow-700">Campus operations</p>
+                  <h1 className="mt-1 text-2xl font-black text-green-950 md:text-3xl">Admin Dashboard</h1>
+                  <p className="mt-1 text-sm font-semibold text-green-700">Approvals, payments, shop status, and live data health.</p>
+                </div>
+                <label className="inline-flex w-fit items-center gap-2 rounded-lg border border-yellow-500 bg-yellow-50 px-3 py-2 text-xs font-black text-green-950">
+                  <input
+                    type="checkbox"
+                    checked={manualFallback}
+                    onChange={event => setManualFallback(event.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  Manual fallback {manualFallback ? 'ON' : 'OFF'}
+                </label>
               </div>
-              <label className="flex items-center gap-3 rounded-lg border-2 border-yellow-600 bg-white/85 px-4 py-3 font-black text-green-950">
-                Manual payment fallback
-                <input
-                  type="checkbox"
-                  checked={manualFallback}
-                  onChange={event => setManualFallback(event.target.checked)}
-                  className="h-5 w-5"
-                />
-                {manualFallback ? 'ON' : 'OFF'}
-              </label>
-            </div>
-            {message && (
-              <div className="mt-4 rounded-lg border-2 border-yellow-500 bg-white px-4 py-3 font-bold text-green-900">
-                {message}
+              {(message || loadError) && (
+                <div className={`mt-3 rounded-lg border px-3 py-2 text-sm font-bold ${
+                  loadError ? 'border-red-300 bg-red-50 text-red-700' : 'border-green-300 bg-green-50 text-green-800'
+                }`}>
+                  {loadError || message}
+                </div>
+              )}
+            </section>
+
+            <aside className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-950 text-xl font-black text-yellow-300">
+                  A
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-green-950">{session?.name || 'Campus Admin'}</p>
+                  <p className="truncate text-xs font-bold text-green-700">{session?.email || '12@gmail.com'}</p>
+                </div>
               </div>
-            )}
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs font-black">
+                <span className="rounded-lg bg-green-50 px-2 py-2 text-green-800">Approver</span>
+                <span className="rounded-lg bg-yellow-50 px-2 py-2 text-yellow-800">Verifier</span>
+                <span className="rounded-lg bg-slate-100 px-2 py-2 text-slate-700">Auditor</span>
+              </div>
+            </aside>
           </div>
 
-          <div className="mb-8 grid gap-4 md:grid-cols-4">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             {[
-              ['Total orders', orders.length],
-              ['Revenue', `₹${totalRevenue}`],
-              ['Commission', `₹${totalCommission}`],
-              ['Razorpay fees', `₹${gatewayFees}`],
-              ['Vendor revenue', `₹${vendorRevenue}`],
-              ['Active shops', activeShops.length],
-              ['Pending reviews', pendingShops.length + pendingPrices.length + pendingPayments.length],
+              ['Orders', orders.length],
+              ['Revenue', money(totalRevenue)],
+              ['Commission', money(totalCommission)],
+              ['Fees', money(gatewayFees)],
+              ['Vendor', money(vendorRevenue)],
+              ['Reviews', reviewCount],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border-2 border-yellow-500 bg-white p-5 shadow-sm">
-                <p className="text-sm font-black text-yellow-700">{label}</p>
-                <p className="mt-2 text-3xl font-black text-green-950">{value}</p>
+              <div key={label} className="rounded-lg border border-green-200 bg-white p-3 shadow-sm">
+                <p className="text-xs font-black uppercase text-green-600">{label}</p>
+                <p className="mt-1 truncate text-xl font-black text-green-950">{value}</p>
               </div>
             ))}
           </div>
 
-          <div className="mb-8 grid gap-6 lg:grid-cols-2">
-            <div className="rounded-lg border-2 border-yellow-500 bg-white p-6 shadow-md">
-              <h2 className="mb-4 border-b-2 border-yellow-400 pb-3 text-2xl font-black text-green-950">
-                Shop approvals
-              </h2>
-              <div className="space-y-3">
+          <div className="mb-4 grid gap-4 lg:grid-cols-[1fr_1fr_320px]">
+            <section className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3 border-b border-green-100 pb-2">
+                <h2 className="text-lg font-black text-green-950">Shop Approvals</h2>
+                <span className="rounded-full bg-yellow-100 px-2 py-1 text-xs font-black text-yellow-800">{pendingShops.length}</span>
+              </div>
+              <div className="space-y-2">
                 {pendingShops.map(shop => (
-                  <div key={shop.id} className="rounded-lg border-2 border-yellow-200 bg-yellow-50 p-4">
-                    <div className="mb-3 flex justify-between gap-4">
-                      <div>
-                        <p className="font-black text-green-950">{shop.name}</p>
-                        <p className="text-sm font-bold text-green-700">{shop.category} · {shop.shopkeeper_name}</p>
+                  <div key={shop.id} className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-green-950">{shop.name}</p>
+                        <p className="truncate text-xs font-bold text-green-700">{shop.category} · {shop.shopkeeper_name}</p>
                       </div>
-                      <span className="h-fit rounded-full bg-yellow-200 px-3 py-1 text-xs font-black text-yellow-900">
-                        Pending
-                      </span>
+                      <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-yellow-800">Pending</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button onClick={() => void updateShopApproval(shop.id, 'Approved')} className="rounded-lg border-2 border-green-800 bg-green-700 px-3 py-2 font-black text-white">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => void updateShopApproval(shop.id, 'Approved')} className="rounded-lg bg-green-800 px-3 py-2 text-xs font-black text-white">
                         Approve
                       </button>
-                      <button onClick={() => void updateShopApproval(shop.id, 'Rejected')} className="rounded-lg border-2 border-red-600 bg-red-100 px-3 py-2 font-black text-red-700">
+                      <button onClick={() => void updateShopApproval(shop.id, 'Rejected')} className="rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-black text-red-700">
                         Reject
                       </button>
                     </div>
                   </div>
                 ))}
-                {pendingShops.length === 0 && <p className="font-bold text-green-800">No pending shop approvals.</p>}
+                {pendingShops.length === 0 && <p className="text-sm font-bold text-green-700">No pending shops.</p>}
               </div>
-            </div>
+            </section>
 
-            <div className="rounded-lg border-2 border-yellow-500 bg-white p-6 shadow-md">
-              <h2 className="mb-4 border-b-2 border-yellow-400 pb-3 text-2xl font-black text-green-950">
-                Price approvals
-              </h2>
-              <div className="space-y-3">
+            <section className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3 border-b border-green-100 pb-2">
+                <h2 className="text-lg font-black text-green-950">Price Requests</h2>
+                <span className="rounded-full bg-yellow-100 px-2 py-1 text-xs font-black text-yellow-800">{pendingPrices.length}</span>
+              </div>
+              <div className="space-y-2">
                 {pendingPrices.map(product => (
-                  <div key={product.id} className="rounded-lg border-2 border-yellow-200 bg-yellow-50 p-4">
-                    <p className="font-black text-green-950">{product.name}</p>
-                    <p className="mb-3 text-sm font-bold text-yellow-800">
-                      {shopById[product.shop_id]?.name} requests ₹{product.pending_price}. Current price ₹{product.price}.
+                  <div key={product.id} className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                    <p className="truncate text-sm font-black text-green-950">{product.name}</p>
+                    <p className="mb-2 text-xs font-bold text-yellow-800">
+                      {shopById[product.shop_id]?.name || 'Shop'} · {money(product.price)} to {money(product.pending_price || 0)}
                     </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button onClick={() => void approvePrice(product)} className="rounded-lg border-2 border-green-800 bg-green-700 px-3 py-2 font-black text-white">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => void approvePrice(product)} className="rounded-lg bg-green-800 px-3 py-2 text-xs font-black text-white">
                         Approve
                       </button>
-                      <button onClick={() => void rejectPrice(product)} className="rounded-lg border-2 border-red-600 bg-red-100 px-3 py-2 font-black text-red-700">
+                      <button onClick={() => void rejectPrice(product)} className="rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-black text-red-700">
                         Reject
                       </button>
                     </div>
                   </div>
                 ))}
-                {pendingPrices.length === 0 && <p className="font-bold text-green-800">No pending price approvals.</p>}
+                {pendingPrices.length === 0 && <p className="text-sm font-bold text-green-700">No pending prices.</p>}
               </div>
-            </div>
+            </section>
+
+            <section className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 border-b border-green-100 pb-2 text-lg font-black text-green-950">Database</h2>
+              <div className={`rounded-lg border p-3 ${
+                databaseStatus?.mode === 'mongo'
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-yellow-300 bg-yellow-50'
+              }`}>
+                <p className="text-xs font-black uppercase text-green-700">
+                  {databaseStatus?.connected ? 'Connected' : 'Not connected'}
+                </p>
+                <p className="mt-1 text-base font-black text-green-950">{databaseStatus?.database || 'Checking database'}</p>
+                <p className="mt-2 text-xs font-bold text-green-700">{databaseStatus?.message || 'Waiting for backend status.'}</p>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-black">
+                <span className="rounded-lg bg-slate-100 px-2 py-2 text-slate-700">Shops {summary?.shops ?? shops.length}</span>
+                <span className="rounded-lg bg-slate-100 px-2 py-2 text-slate-700">Products {summary?.products ?? products.length}</span>
+                <span className="rounded-lg bg-slate-100 px-2 py-2 text-slate-700">Open {summary?.orderable_shops ?? activeShops.length}</span>
+                <span className="rounded-lg bg-slate-100 px-2 py-2 text-slate-700">Token {summary?.token_starts_at ?? '-'}</span>
+              </div>
+            </section>
           </div>
 
-          <div className="mb-8 overflow-hidden rounded-lg border-2 border-yellow-500 bg-white shadow-md">
-            <div className="border-b-2 border-yellow-400 p-5">
-              <h2 className="text-2xl font-black text-green-950">Shops and revenue</h2>
+          <div className="mb-4 overflow-hidden rounded-lg border border-green-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-1 border-b border-green-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-lg font-black text-green-950">Shops And Revenue</h2>
+              <p className="text-xs font-bold text-green-700">{activeShops.length} active · {approvedShops.length} approved</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-yellow-50">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="bg-green-50">
                   <tr>
                     {['Shop', 'Approval', 'Present', 'Status', 'Orders', 'Revenue'].map(column => (
-                      <th key={column} className="px-5 py-3 text-left font-black text-green-950">{column}</th>
+                      <th key={column} className="px-4 py-2 text-left text-xs font-black uppercase text-green-800">{column}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {approvedShops.map(shop => (
-                    <tr key={shop.id} className="border-t border-yellow-100">
-                      <td className="px-5 py-4 font-black text-green-950">{shop.name}</td>
-                      <td className="px-5 py-4 text-green-800">{shop.approval_status}</td>
-                      <td className="px-5 py-4 text-green-800">{shop.present ? 'ON' : 'OFF'}</td>
-                      <td className="px-5 py-4 text-green-800">{shop.status}</td>
-                      <td className="px-5 py-4 text-green-800">{shop.orders_today}</td>
-                      <td className="px-5 py-4 font-black text-yellow-700">₹{shop.revenue_today}</td>
+                    <tr key={shop.id} className="border-t border-green-100">
+                      <td className="px-4 py-3 font-black text-green-950">{shop.name}</td>
+                      <td className="px-4 py-3 text-green-800">{shop.approval_status}</td>
+                      <td className="px-4 py-3 text-green-800">{shop.present ? 'ON' : 'OFF'}</td>
+                      <td className="px-4 py-3 text-green-800">{shop.status}</td>
+                      <td className="px-4 py-3 text-green-800">{shop.orders_today}</td>
+                      <td className="px-4 py-3 font-black text-yellow-700">{money(shop.revenue_today)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -201,37 +268,35 @@ export function AdminDashboard() {
             </div>
           </div>
 
-          <div className="mb-8 rounded-lg border-2 border-yellow-500 bg-white p-6 shadow-md">
-            <h2 className="mb-3 text-2xl font-black text-green-950">Manual payment verification</h2>
-            <p className="font-bold text-green-800">
-              {manualFallback
-                ? 'Customers can submit UTR number and screenshot. Admin must verify before order acceptance.'
-                : 'Manual fallback is off. Razorpay remains the primary payment flow.'}
-            </p>
-            <div className="mt-5 space-y-3">
+          <section className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex flex-col gap-1 border-b border-green-100 pb-2 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-lg font-black text-green-950">Manual Payment Verification</h2>
+              <p className="text-xs font-bold text-green-700">{manualFallback ? 'Fallback enabled' : 'Razorpay primary'}</p>
+            </div>
+            <div className="space-y-2">
               {pendingPayments.map(payment => (
-                <div key={payment.id} className="rounded-lg border-2 border-yellow-200 bg-yellow-50 p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="font-black text-green-950">{payment.id} · Order {payment.order_id}</p>
-                      <p className="text-sm font-bold text-green-800">
-                        ₹{payment.amount} · {payment.method} · UTR {payment.utr_number || 'missing'} · {payment.screenshot_name || 'no screenshot'}
+                <div key={payment.id} className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                  <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-green-950">{payment.id} · Order {payment.order_id}</p>
+                      <p className="truncate text-xs font-bold text-green-800">
+                        {money(payment.amount)} · {payment.method} · UTR {payment.utr_number || 'missing'} · {payment.screenshot_name || 'no screenshot'}
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => void updatePaymentStatus(payment.id, 'Success')} className="rounded-lg border-2 border-green-800 bg-green-700 px-3 py-2 font-black text-white">
+                      <button onClick={() => void updatePaymentStatus(payment.id, 'Success')} className="rounded-lg bg-green-800 px-3 py-2 text-xs font-black text-white">
                         Verify
                       </button>
-                      <button onClick={() => void updatePaymentStatus(payment.id, 'Failed')} className="rounded-lg border-2 border-red-600 bg-red-100 px-3 py-2 font-black text-red-700">
+                      <button onClick={() => void updatePaymentStatus(payment.id, 'Failed')} className="rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-black text-red-700">
                         Reject
                       </button>
                     </div>
                   </div>
                 </div>
               ))}
-              {pendingPayments.length === 0 && <p className="font-bold text-green-800">No manual payments waiting.</p>}
+              {pendingPayments.length === 0 && <p className="text-sm font-bold text-green-700">No manual payments waiting.</p>}
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </MainLayout>

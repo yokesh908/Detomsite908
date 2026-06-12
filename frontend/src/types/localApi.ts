@@ -78,6 +78,23 @@ export interface LocalNotification {
   created_at: string
 }
 
+export interface LocalSummary {
+  shops: number
+  orderable_shops: number
+  products: number
+  active_orders: number
+  revenue: number
+  token_starts_at: number
+}
+
+export interface LocalDatabaseStatus {
+  connected: boolean
+  mode: 'mongo' | 'demo'
+  database: string
+  persistent: boolean
+  message: string
+}
+
 function parseShopTime(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
   if (!match) return null
