@@ -4,6 +4,8 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { MainLayout } from '../../components/Layout'
+import api from '../../services/api'
+import { saveLocalSession } from '../../utils/session'
 
 export function ShopkeeperRegister() {
   const navigate = useNavigate()
@@ -51,12 +53,30 @@ export function ShopkeeperRegister() {
     }
 
     setLoading(true)
-    // TODO: Call registration API
-    setTimeout(() => {
+    try {
+      await api.post('/local/shops', {
+        name: formData.shopName,
+        category: formData.shopCategory,
+        description: `${formData.shopName} at ${formData.campus}`,
+        shopkeeper_email: formData.email,
+        shopkeeper_name: formData.fullName,
+        phone: formData.phone,
+      })
+      saveLocalSession({
+        role: 'shopkeeper',
+        email: formData.email,
+        name: formData.fullName,
+        phone: formData.phone,
+        shop_name: formData.shopName,
+        shop_category: formData.shopCategory,
+      })
       setLoading(false)
       alert('Registration submitted! Awaiting admin approval.')
-      navigate('/login')
-    }, 1500)
+      navigate('/shopkeeper-dashboard')
+    } catch {
+      setLoading(false)
+      setError('Unable to submit registration. Please try again.')
+    }
   }
 
   return (

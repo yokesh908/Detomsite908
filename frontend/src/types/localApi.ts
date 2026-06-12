@@ -9,6 +9,7 @@ export interface LocalShop {
   present: number
   status: string
   approval_status: string
+  shopkeeper_email: string
   shopkeeper_name: string
   phone: string
   orders_today: number
@@ -93,6 +94,14 @@ export interface LocalDatabaseStatus {
   database: string
   persistent: boolean
   message: string
+}
+
+export interface LocalPaymentSettings {
+  manual_enabled: boolean
+  upi_id: string
+  receiver_name: string
+  instructions: string
+  razorpay_enabled: boolean
 }
 
 function parseShopTime(value: string) {

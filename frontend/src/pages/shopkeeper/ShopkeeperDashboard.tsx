@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { MainLayout } from '../../components/Layout'
 import api from '../../services/api'
+import { getLocalSession } from '../../utils/session'
 
 type Panel = 'details' | 'hours' | 'menu' | 'availability'
 
@@ -15,6 +16,7 @@ interface LocalShop {
   present: number
   status: string
   approval_status: string
+  shopkeeper_email: string
   shopkeeper_name: string
   phone: string
   orders_today: number
@@ -87,8 +89,9 @@ export function ShopkeeperDashboard() {
   })
   const [productForms, setProductForms] = useState<Record<string, ProductForm>>({})
   const [newProduct, setNewProduct] = useState<ProductForm>(emptyProduct)
+  const session = getLocalSession()
 
-  const shop = shops.find(item => item.id === '1') || shops[0]
+  const shop = shops.find(item => item.shopkeeper_email && item.shopkeeper_email === session?.email) || shops[0]
   const shopProducts = shop ? products.filter(product => product.shop_id === shop.id) : []
   const shopOrders = shop ? orders.filter(order => order.shop_id === shop.id) : []
   const pendingOrders = shopOrders.filter(order => order.status === 'Pending Acceptance')
@@ -114,7 +117,7 @@ export function ShopkeeperDashboard() {
       ])
       const nextShops = shopsResponse.data
       const nextProducts = productsResponse.data
-      const selectedShop = nextShops.find(item => item.id === '1') || nextShops[0]
+      const selectedShop = nextShops.find(item => item.shopkeeper_email && item.shopkeeper_email === session?.email) || nextShops[0]
 
       setShops(nextShops)
       setProducts(nextProducts)
@@ -170,6 +173,10 @@ export function ShopkeeperDashboard() {
 
   const togglePresent = async (present: boolean) => {
     if (!shop) return
+    if (shop.approval_status !== 'Approved') {
+      setMessage('Admin approval is required before enabling Present.')
+      return
+    }
     const response = await api.patch<LocalShop>(`/local/shops/${shop.id}`, { present })
     updateShopState(response.data)
     setMessage(`Present toggle is ${present ? 'ON' : 'OFF'}.`)
@@ -287,6 +294,7 @@ export function ShopkeeperDashboard() {
                   type="checkbox"
                   checked={Boolean(shop.present)}
                   onChange={event => void togglePresent(event.target.checked)}
+                  disabled={shop.approval_status !== 'Approved'}
                   className="h-5 w-5"
                 />
                 {shop.present ? 'ON' : 'OFF'}
@@ -295,6 +303,11 @@ export function ShopkeeperDashboard() {
             {message && (
               <div className="mt-4 rounded-lg border-2 border-yellow-500 bg-white/85 px-4 py-3 text-sm font-bold text-green-900">
                 {message}
+              </div>
+            )}
+            {shop.approval_status !== 'Approved' && (
+              <div className="mt-4 rounded-lg border-2 border-yellow-500 bg-yellow-50 px-4 py-3 text-sm font-black text-yellow-800">
+                Your shop is pending admin approval. It is hidden from students and cannot accept orders yet.
               </div>
             )}
           </div>

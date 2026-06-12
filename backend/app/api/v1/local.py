@@ -56,8 +56,20 @@ class LocalShopUpdate(BaseModel):
     present: bool | None = None
     status: str | None = None
     approval_status: str | None = None
+    shopkeeper_email: str | None = None
     shopkeeper_name: str | None = None
     phone: str | None = None
+
+
+class LocalShopCreate(BaseModel):
+    name: str
+    category: str
+    description: str = ""
+    shopkeeper_email: EmailStr
+    shopkeeper_name: str
+    phone: str
+    opening_time: str = "09:00 AM"
+    closing_time: str = "09:00 PM"
 
 
 class LocalProductCreate(BaseModel):
@@ -98,6 +110,7 @@ class LocalOrderCreate(BaseModel):
     student_phone: str = ""
     delivery_location: str
     delivery_slot: str
+    pending_payment: bool = False
 
 
 class LocalPaymentCreate(BaseModel):
@@ -110,6 +123,14 @@ class LocalPaymentCreate(BaseModel):
 
 class LocalPaymentStatusUpdate(BaseModel):
     status: str
+
+
+class LocalPaymentSettings(BaseModel):
+    manual_enabled: bool | None = None
+    upi_id: str | None = None
+    receiver_name: str | None = None
+    instructions: str | None = None
+    razorpay_enabled: bool | None = None
 
 
 class LocalTicketCreate(BaseModel):
@@ -136,10 +157,17 @@ async def create_session(data: LocalSessionCreate):
 
 
 @router.get("/shops")
-async def shops():
+async def shops(public_only: bool = False):
     if _use_mongo():
         return await local_mongo_db.list_shops()
-    return local_demo_db.list_shops()
+    return local_demo_db.list_shops(public_only=public_only)
+
+
+@router.post("/shops")
+async def create_shop(data: LocalShopCreate):
+    if _use_mongo():
+        raise HTTPException(status_code=501, detail="Shop registration is not available for Mongo mode")
+    return local_demo_db.create_shop(data.model_dump())
 
 
 @router.patch("/shops/{shop_id}")
@@ -208,7 +236,7 @@ async def add_order(data: LocalOrderCreate):
     else:
         order = local_demo_db.create_order(data.model_dump())
     if not order:
-        raise HTTPException(status_code=400, detail="Unable to create order")
+        raise HTTPException(status_code=400, detail="Shop is not approved, present, open, or orderable")
     return order
 
 
@@ -232,6 +260,13 @@ async def payments():
 
 @router.post("/payments")
 async def add_payment(data: LocalPaymentCreate):
+    if not _use_mongo():
+        payment_settings = local_demo_db.get_payment_settings()
+        if data.method == "Manual UTR" and (not payment_settings["manual_enabled"] or not payment_settings["upi_id"]):
+            raise HTTPException(status_code=400, detail="Manual payment is not configured by admin")
+        if data.method == "Razorpay":
+            raise HTTPException(status_code=400, detail="Razorpay is not configured")
+
     if _use_mongo():
         payment = await local_mongo_db.create_payment(
             data.order_id,
@@ -251,6 +286,26 @@ async def add_payment(data: LocalPaymentCreate):
     if not payment:
         raise HTTPException(status_code=400, detail="Unable to create payment")
     return payment
+
+
+@router.get("/payment-settings")
+async def payment_settings():
+    if _use_mongo():
+        return {
+            "manual_enabled": False,
+            "upi_id": "",
+            "receiver_name": "",
+            "instructions": "",
+            "razorpay_enabled": False,
+        }
+    return local_demo_db.get_payment_settings()
+
+
+@router.patch("/payment-settings")
+async def patch_payment_settings(data: LocalPaymentSettings):
+    if _use_mongo():
+        raise HTTPException(status_code=501, detail="Payment settings are not available for Mongo mode")
+    return local_demo_db.update_payment_settings(data.model_dump(exclude_unset=True))
 
 
 @router.patch("/payments/{payment_id}/status")

@@ -80,7 +80,7 @@ export const MainLayout: React.FC<LayoutProps> = ({
         .catch(() => setNotifications([]))
     }
     loadNotifications()
-    const timer = window.setInterval(loadNotifications, 5000)
+    const timer = window.setInterval(loadNotifications, 30000)
     return () => window.clearInterval(timer)
   }, [])
 

@@ -20,7 +20,7 @@ export function Shops() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get<LocalShop[]>('/local/shops')
+    api.get<LocalShop[]>('/local/shops', { params: { public_only: true } })
       .then(response => setShops(response.data))
       .finally(() => setLoading(false))
   }, [])
@@ -120,6 +120,11 @@ export function Shops() {
                   </div>
                 </Link>
               ))}
+              {visibleShops.length === 0 && (
+                <div className="rounded-lg border-2 border-yellow-500 bg-white p-8 text-center font-black text-green-950 md:col-span-2 lg:col-span-4">
+                  No approved open shops are available right now.
+                </div>
+              )}
             </div>
           )}
 

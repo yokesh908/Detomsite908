@@ -88,13 +88,7 @@ button:hover, a:hover {
 }
 
 .gold-sheen::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.55) 42%, transparent 62%);
-  transform: translateX(-130%);
-  animation: gold-shine 5.5s ease-in-out infinite;
+  content: none;
 }
 
 .gold-button {
@@ -114,13 +108,4 @@ button:hover, a:hover {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-}
-
-@keyframes gold-shine {
-  0%, 45% {
-    transform: translateX(-130%);
-  }
-  75%, 100% {
-    transform: translateX(130%);
-  }
 }

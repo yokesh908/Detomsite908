@@ -1,8 +1,8 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { MainLayout } from '../components/Layout'
 import api from '../services/api'
-import { LocalOrder, LocalPayment } from '../types/localApi'
+import { LocalOrder, LocalPayment, LocalPaymentSettings } from '../types/localApi'
 import { clearCart, getCart } from '../utils/cart'
 import { getBillBreakdown } from '../utils/billing'
 import { getLocalSession } from '../utils/session'
@@ -10,7 +10,8 @@ import { getLocalSession } from '../utils/session'
 export function PaymentPage() {
   const navigate = useNavigate()
   const session = getLocalSession()
-  const [method, setMethod] = useState('Razorpay')
+  const [method, setMethod] = useState('')
+  const [paymentSettings, setPaymentSettings] = useState<LocalPaymentSettings | null>(null)
   const [utrNumber, setUtrNumber] = useState('')
   const [screenshotName, setScreenshotName] = useState('')
   const [deliveryLocation, setDeliveryLocation] = useState(session?.default_delivery_location || 'Hostel A Block 201')
@@ -20,12 +21,32 @@ export function PaymentPage() {
   const [error, setError] = useState('')
   const cart = getCart()
   const bill = getBillBreakdown(cart)
+  const manualReady = Boolean(paymentSettings?.manual_enabled && paymentSettings.upi_id)
+
+  useEffect(() => {
+    api.get<LocalPaymentSettings>('/local/payment-settings')
+      .then(response => {
+        setPaymentSettings(response.data)
+        if (response.data.manual_enabled && response.data.upi_id) {
+          setMethod('Manual UTR')
+        }
+      })
+      .catch(() => setError('Unable to load payment settings.'))
+  }, [])
 
   const submitPayment = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
     if (!cart.length) {
       setError('Cart is empty.')
+      return
+    }
+    if (!manualReady || method !== 'Manual UTR') {
+      setError('Payment is not configured by admin yet.')
+      return
+    }
+    if (!utrNumber.trim() || !screenshotName.trim()) {
+      setError('Enter UTR number and attach payment screenshot.')
       return
     }
 
@@ -38,20 +59,21 @@ export function PaymentPage() {
         student_phone: studentPhone.trim(),
         delivery_location: deliveryLocation,
         delivery_slot: deliverySlot,
+        pending_payment: true,
       })
 
       await api.post<LocalPayment>('/local/payments', {
         order_id: orderResponse.data.id,
         amount: bill.total,
         method,
-        utr_number: method === 'Manual UTR' ? utrNumber : null,
-        screenshot_name: method === 'Manual UTR' ? screenshotName : null,
+        utr_number: utrNumber,
+        screenshot_name: screenshotName,
       })
 
       clearCart()
       navigate(`/order-result/${orderResponse.data.id}`)
     } catch {
-      setError('Payment could not be completed. Please try again.')
+      setError('Payment could not be completed. Check shop availability and payment configuration.')
     } finally {
       setLoading(false)
     }
@@ -97,21 +119,36 @@ export function PaymentPage() {
                     <option>Evening</option>
                     <option>Night</option>
                   </select>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    {['Razorpay', 'UPI', 'Manual UTR'].map(option => (
+                  <div className="rounded-lg border-2 border-yellow-500 bg-yellow-50 p-4">
+                    <p className="text-sm font-black text-green-950">Payment method</p>
+                    {manualReady ? (
+                      <div className="mt-3 rounded-lg border border-green-200 bg-white p-3 text-sm font-bold text-green-900">
+                        <p>Pay to: {paymentSettings?.receiver_name || 'Campus merchant'}</p>
+                        <p>UPI ID: {paymentSettings?.upi_id}</p>
+                        {paymentSettings?.instructions && <p className="mt-1 text-green-700">{paymentSettings.instructions}</p>}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm font-bold text-red-700">
+                        Admin has not configured a payment method yet. Orders are blocked until payment is configured.
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {['Manual UTR'].map(option => (
                       <button
                         key={option}
                         type="button"
                         onClick={() => setMethod(option)}
+                        disabled={!manualReady}
                         className={`rounded-lg border-2 px-4 py-3 font-black ${
                           method === option ? 'gold-button border-yellow-700' : 'border-yellow-500 bg-white text-green-900'
-                        }`}
+                        } disabled:cursor-not-allowed disabled:opacity-40`}
                       >
                         {option}
                       </button>
                     ))}
                   </div>
-                  {method === 'Manual UTR' && (
+                  {method === 'Manual UTR' && manualReady && (
                     <div className="grid gap-3 md:grid-cols-2">
                       <input
                         value={utrNumber}
@@ -145,8 +182,8 @@ export function PaymentPage() {
                   <div className="flex justify-between text-sm text-green-700"><span>Vendor receives</span><span>₹{bill.vendorReceives}</span></div>
                   <div className="flex justify-between border-t-2 border-yellow-400 pt-3 text-xl font-black"><span>Total</span><span>₹{bill.total}</span></div>
                 </div>
-                <button disabled={loading} className="gold-button mt-5 w-full rounded-lg border-2 px-4 py-3 font-black disabled:opacity-50">
-                  {loading ? 'Processing...' : `Pay ₹${bill.total}`}
+                <button disabled={loading || !manualReady} className="gold-button mt-5 w-full rounded-lg border-2 px-4 py-3 font-black disabled:cursor-not-allowed disabled:opacity-50">
+                  {loading ? 'Processing...' : manualReady ? `Submit payment ₹${bill.total}` : 'Payment not configured'}
                 </button>
               </aside>
             </form>

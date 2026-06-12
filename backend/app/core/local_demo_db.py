@@ -8,8 +8,10 @@ development.
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 
@@ -104,6 +106,35 @@ def _rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def _parse_shop_time(value: str) -> int | None:
+    try:
+        time_value = datetime.strptime(value.strip().upper(), "%I:%M %p")
+        return time_value.hour * 60 + time_value.minute
+    except ValueError:
+        return None
+
+
+def _shop_is_within_hours(shop: dict[str, Any]) -> bool:
+    open_time = _parse_shop_time(str(shop.get("opening_time", "")))
+    close_time = _parse_shop_time(str(shop.get("closing_time", "")))
+    if open_time is None or close_time is None:
+        return True
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    current_minutes = now.hour * 60 + now.minute
+    if open_time <= close_time:
+        return open_time <= current_minutes <= close_time
+    return current_minutes >= open_time or current_minutes <= close_time
+
+
+def _shop_is_orderable(shop: dict[str, Any]) -> bool:
+    return (
+        shop["approval_status"] == "Approved"
+        and bool(shop["present"])
+        and shop["status"] == "Open"
+        and _shop_is_within_hours(shop)
+    )
+
+
 def _column_exists(connection: sqlite3.Connection, table_name: str, column_name: str) -> bool:
     rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
     return any(row["name"] == column_name for row in rows)
@@ -135,6 +166,7 @@ def init_local_demo_db() -> None:
                 present INTEGER NOT NULL,
                 status TEXT NOT NULL,
                 approval_status TEXT NOT NULL,
+                shopkeeper_email TEXT DEFAULT '',
                 shopkeeper_name TEXT NOT NULL,
                 phone TEXT NOT NULL,
                 orders_today INTEGER NOT NULL,
@@ -206,30 +238,37 @@ def init_local_demo_db() -> None:
                 is_read INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             """
         )
 
         if not _column_exists(connection, "payments", "screenshot_name"):
             connection.execute("ALTER TABLE payments ADD COLUMN screenshot_name TEXT")
+        if not _column_exists(connection, "shops", "shopkeeper_email"):
+            connection.execute("ALTER TABLE shops ADD COLUMN shopkeeper_email TEXT DEFAULT ''")
 
         shop_count = connection.execute("SELECT COUNT(*) FROM shops").fetchone()[0]
-        if shop_count:
+        if shop_count or not settings.SEED_DEMO_DATA:
             return
 
         connection.executemany(
             """
             INSERT INTO shops (
                 id, name, category, description, rating, opening_time,
-                closing_time, present, status, approval_status, shopkeeper_name,
+                closing_time, present, status, approval_status, shopkeeper_email, shopkeeper_name,
                 phone, orders_today, revenue_today, current_token
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                ("1", "Pizza Palace", "Italian", "Campus pizzas, garlic breads, and quick combo meals.", 4.5, "12:00 AM", "11:59 PM", 1, "Open", "Approved", "Arun Kumar", "9876543210", 24, 12450, 23),
-                ("2", "Burger Bay", "Fast Food", "Burgers, fries, rolls, and cold drinks for short breaks.", 4.2, "09:00 AM", "09:30 PM", 1, "Busy", "Approved", "Priya Menon", "9876543211", 18, 8560, 21),
-                ("3", "Biryani House", "Indian", "Meals, biryani, snacks, and evening tiffin boxes.", 4.6, "11:00 AM", "11:00 PM", 0, "Closed", "Approved", "Naveen Shah", "9876543212", 12, 9320, 18),
-                ("4", "Tea Point", "Cafe", "Tea, coffee, puffs, sandwiches, and study-time snacks.", 4.7, "07:30 AM", "08:00 PM", 1, "Open", "Pending Approval", "Meera Joseph", "9876543213", 0, 0, 18),
+                ("1", "Pizza Palace", "Italian", "Campus pizzas, garlic breads, and quick combo meals.", 4.5, "12:00 AM", "11:59 PM", 1, "Open", "Approved", "", "Arun Kumar", "9876543210", 24, 12450, 23),
+                ("2", "Burger Bay", "Fast Food", "Burgers, fries, rolls, and cold drinks for short breaks.", 4.2, "09:00 AM", "09:30 PM", 1, "Busy", "Approved", "", "Priya Menon", "9876543211", 18, 8560, 21),
+                ("3", "Biryani House", "Indian", "Meals, biryani, snacks, and evening tiffin boxes.", 4.6, "11:00 AM", "11:00 PM", 0, "Closed", "Approved", "", "Naveen Shah", "9876543212", 12, 9320, 18),
+                ("4", "Tea Point", "Cafe", "Tea, coffee, puffs, sandwiches, and study-time snacks.", 4.7, "07:30 AM", "08:00 PM", 1, "Open", "Pending Approval", "", "Meera Joseph", "9876543213", 0, 0, 18),
             ],
         )
 
@@ -281,16 +320,55 @@ def save_session(email: str, name: str, role: str) -> dict[str, Any]:
         return dict(row)
 
 
-def list_shops() -> list[dict[str, Any]]:
+def list_shops(public_only: bool = False) -> list[dict[str, Any]]:
     with _connect() as connection:
         rows = connection.execute("SELECT * FROM shops ORDER BY rating DESC").fetchall()
-        return _rows_to_dicts(rows)
+        shops = _rows_to_dicts(rows)
+        if public_only:
+            return [shop for shop in shops if _shop_is_orderable(shop)]
+        return shops
 
 
 def get_shop(shop_id: str) -> dict[str, Any] | None:
     with _connect() as connection:
         row = connection.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
         return dict(row) if row else None
+
+
+def create_shop(values: dict[str, Any]) -> dict[str, Any]:
+    with _connect() as connection:
+        next_id = connection.execute("SELECT COUNT(*) + 1 FROM shops").fetchone()[0]
+        shop_id = f"s{next_id}"
+        connection.execute(
+            """
+            INSERT INTO shops (
+                id, name, category, description, rating, opening_time,
+                closing_time, present, status, approval_status, shopkeeper_email,
+                shopkeeper_name, phone, orders_today, revenue_today, current_token
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                shop_id,
+                values["name"],
+                values["category"],
+                values.get("description", ""),
+                0,
+                values.get("opening_time", "09:00 AM"),
+                values.get("closing_time", "09:00 PM"),
+                0,
+                "Closed",
+                "Pending Approval",
+                values.get("shopkeeper_email", ""),
+                values["shopkeeper_name"],
+                values["phone"],
+                0,
+                0,
+                18,
+            ),
+        )
+        row = connection.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
+        return dict(row)
 
 
 def update_shop(shop_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
@@ -303,6 +381,7 @@ def update_shop(shop_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
         "present",
         "status",
         "approval_status",
+        "shopkeeper_email",
         "shopkeeper_name",
         "phone",
     }
@@ -434,6 +513,8 @@ def create_order(values: dict[str, Any]) -> dict[str, Any] | None:
         shop = connection.execute("SELECT * FROM shops WHERE id = ?", (values["shop_id"],)).fetchone()
         if not shop:
             return None
+        if not _shop_is_orderable(dict(shop)):
+            return None
 
         product_ids = [item["product_id"] for item in values["items"]]
         products_by_id = {}
@@ -483,7 +564,7 @@ def create_order(values: dict[str, Any]) -> dict[str, Any] | None:
                 total,
                 values["delivery_location"],
                 values["delivery_slot"],
-                "Pending Acceptance",
+                "Pending Payment" if values.get("pending_payment") else "Pending Acceptance",
             ),
         )
         row = connection.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
@@ -544,7 +625,45 @@ def update_payment_status(payment_id: str, status: str) -> dict[str, Any] | None
     with _connect() as connection:
         connection.execute("UPDATE payments SET status = ? WHERE id = ?", (status, payment_id))
         row = connection.execute("SELECT * FROM payments WHERE id = ?", (payment_id,)).fetchone()
+        if row and status == "Success":
+            connection.execute("UPDATE orders SET status = ? WHERE id = ?", ("Pending Acceptance", row["order_id"]))
+        if row and status == "Failed":
+            connection.execute("UPDATE orders SET status = ? WHERE id = ?", ("Failed", row["order_id"]))
         return dict(row) if row else None
+
+
+def get_payment_settings() -> dict[str, Any]:
+    defaults = {
+        "manual_enabled": False,
+        "upi_id": "",
+        "receiver_name": "",
+        "instructions": "",
+        "razorpay_enabled": False,
+    }
+    with _connect() as connection:
+        rows = connection.execute("SELECT key, value FROM app_settings").fetchall()
+        values = {row["key"]: row["value"] for row in rows}
+    return {
+        "manual_enabled": values.get("manual_enabled", "false") == "true",
+        "upi_id": values.get("upi_id", defaults["upi_id"]),
+        "receiver_name": values.get("receiver_name", defaults["receiver_name"]),
+        "instructions": values.get("instructions", defaults["instructions"]),
+        "razorpay_enabled": values.get("razorpay_enabled", "false") == "true",
+    }
+
+
+def update_payment_settings(values: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"manual_enabled", "upi_id", "receiver_name", "instructions", "razorpay_enabled"}
+    with _connect() as connection:
+        for key, value in values.items():
+            if key not in allowed or value is None:
+                continue
+            stored_value = str(value).lower() if isinstance(value, bool) else str(value)
+            connection.execute(
+                "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)",
+                (key, stored_value),
+            )
+    return get_payment_settings()
 
 
 def create_ticket(values: dict[str, Any]) -> dict[str, Any]:

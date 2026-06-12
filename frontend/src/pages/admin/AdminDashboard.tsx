@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { MainLayout } from '../../components/Layout'
 import api from '../../services/api'
 import {
   LocalDatabaseStatus,
   LocalOrder,
   LocalPayment,
+  LocalPaymentSettings,
   LocalProduct,
   LocalShop,
   LocalSummary,
@@ -20,7 +21,21 @@ export function AdminDashboard() {
   const [payments, setPayments] = useState<LocalPayment[]>([])
   const [summary, setSummary] = useState<LocalSummary | null>(null)
   const [databaseStatus, setDatabaseStatus] = useState<LocalDatabaseStatus | null>(null)
+  const [paymentSettings, setPaymentSettings] = useState<LocalPaymentSettings | null>(null)
   const [manualFallback, setManualFallback] = useState(false)
+  const [editingShopId, setEditingShopId] = useState('')
+  const [shopEditForm, setShopEditForm] = useState({
+    name: '',
+    category: '',
+    description: '',
+    opening_time: '',
+    closing_time: '',
+    present: false,
+    status: 'Closed',
+    approval_status: 'Pending Approval',
+    shopkeeper_name: '',
+    phone: '',
+  })
   const [message, setMessage] = useState('')
   const [loadError, setLoadError] = useState('')
 
@@ -29,13 +44,14 @@ export function AdminDashboard() {
   const loadAdmin = async () => {
     setLoadError('')
     try {
-      const [shopsResponse, productsResponse, ordersResponse, paymentsResponse, summaryResponse, statusResponse] = await Promise.all([
+      const [shopsResponse, productsResponse, ordersResponse, paymentsResponse, summaryResponse, statusResponse, paymentSettingsResponse] = await Promise.all([
         api.get<LocalShop[]>('/local/shops'),
         api.get<LocalProduct[]>('/local/products'),
         api.get<LocalOrder[]>('/local/orders'),
         api.get<LocalPayment[]>('/local/payments'),
         api.get<LocalSummary>('/local/summary'),
         api.get<LocalDatabaseStatus>('/local/status'),
+        api.get<LocalPaymentSettings>('/local/payment-settings'),
       ])
       setShops(shopsResponse.data)
       setProducts(productsResponse.data)
@@ -43,6 +59,8 @@ export function AdminDashboard() {
       setPayments(paymentsResponse.data)
       setSummary(summaryResponse.data)
       setDatabaseStatus(statusResponse.data)
+      setPaymentSettings(paymentSettingsResponse.data)
+      setManualFallback(paymentSettingsResponse.data.manual_enabled)
     } catch {
       setLoadError('Backend is not reachable. Check the API deployment and database settings.')
     }
@@ -93,6 +111,39 @@ export function AdminDashboard() {
     const response = await api.patch<LocalPayment>(`/local/payments/${paymentId}/status`, { status })
     setPayments(current => current.map(payment => payment.id === paymentId ? response.data : payment))
     setMessage(`Payment marked ${status.toLowerCase()}.`)
+  }
+
+  const startEditShop = (shop: LocalShop) => {
+    setEditingShopId(shop.id)
+    setShopEditForm({
+      name: shop.name,
+      category: shop.category,
+      description: shop.description,
+      opening_time: shop.opening_time,
+      closing_time: shop.closing_time,
+      present: Boolean(shop.present),
+      status: shop.status,
+      approval_status: shop.approval_status,
+      shopkeeper_name: shop.shopkeeper_name,
+      phone: shop.phone,
+    })
+  }
+
+  const saveShopEdit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!editingShopId) return
+    const response = await api.patch<LocalShop>(`/local/shops/${editingShopId}`, shopEditForm)
+    setShops(current => current.map(shop => shop.id === editingShopId ? response.data : shop))
+    setMessage('Shop updated.')
+  }
+
+  const savePaymentSettings = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!paymentSettings) return
+    const response = await api.patch<LocalPaymentSettings>('/local/payment-settings', paymentSettings)
+    setPaymentSettings(response.data)
+    setManualFallback(response.data.manual_enabled)
+    setMessage('Payment settings saved.')
   }
 
   return (
@@ -219,7 +270,7 @@ export function AdminDashboard() {
             <section className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
               <h2 className="mb-3 border-b border-green-100 pb-2 text-lg font-black text-green-950">Database</h2>
               <div className={`rounded-lg border p-3 ${
-                databaseStatus?.mode === 'mongo'
+                databaseStatus?.persistent
                   ? 'border-green-300 bg-green-50'
                   : 'border-yellow-300 bg-yellow-50'
               }`}>
@@ -238,22 +289,75 @@ export function AdminDashboard() {
             </section>
           </div>
 
+          <div className="mb-4 grid gap-4 lg:grid-cols-2">
+            <section className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 border-b border-green-100 pb-2 text-lg font-black text-green-950">Edit Shop</h2>
+              {!editingShopId ? (
+                <p className="text-sm font-bold text-green-700">Choose Edit from the shop table below.</p>
+              ) : (
+                <form onSubmit={saveShopEdit} className="grid gap-3 md:grid-cols-2">
+                  <input value={shopEditForm.name} onChange={event => setShopEditForm({ ...shopEditForm, name: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="Shop name" />
+                  <input value={shopEditForm.category} onChange={event => setShopEditForm({ ...shopEditForm, category: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="Category" />
+                  <input value={shopEditForm.shopkeeper_name} onChange={event => setShopEditForm({ ...shopEditForm, shopkeeper_name: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="Shopkeeper" />
+                  <input value={shopEditForm.phone} onChange={event => setShopEditForm({ ...shopEditForm, phone: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="Phone" />
+                  <input value={shopEditForm.opening_time} onChange={event => setShopEditForm({ ...shopEditForm, opening_time: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="Opening time" />
+                  <input value={shopEditForm.closing_time} onChange={event => setShopEditForm({ ...shopEditForm, closing_time: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="Closing time" />
+                  <select value={shopEditForm.approval_status} onChange={event => setShopEditForm({ ...shopEditForm, approval_status: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm">
+                    {['Pending Approval', 'Approved', 'Rejected', 'Suspended'].map(status => <option key={status}>{status}</option>)}
+                  </select>
+                  <select value={shopEditForm.status} onChange={event => setShopEditForm({ ...shopEditForm, status: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm">
+                    {['Open', 'Busy', 'Closed', 'Maintenance'].map(status => <option key={status}>{status}</option>)}
+                  </select>
+                  <label className="flex items-center gap-2 rounded-lg border border-green-300 px-3 py-2 text-sm font-black text-green-900">
+                    <input type="checkbox" checked={shopEditForm.present} onChange={event => setShopEditForm({ ...shopEditForm, present: event.target.checked })} />
+                    Present
+                  </label>
+                  <textarea value={shopEditForm.description} onChange={event => setShopEditForm({ ...shopEditForm, description: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm md:col-span-2" placeholder="Description" />
+                  <button className="rounded-lg bg-green-800 px-4 py-2 text-sm font-black text-white md:col-span-2">Save Shop</button>
+                </form>
+              )}
+            </section>
+
+            <section className="rounded-lg border border-green-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 border-b border-green-100 pb-2 text-lg font-black text-green-950">Payment Setup</h2>
+              {paymentSettings && (
+                <form onSubmit={savePaymentSettings} className="grid gap-3">
+                  <label className="flex items-center gap-2 text-sm font-black text-green-900">
+                    <input
+                      type="checkbox"
+                      checked={paymentSettings.manual_enabled}
+                      onChange={event => setPaymentSettings({ ...paymentSettings, manual_enabled: event.target.checked })}
+                    />
+                    Enable manual UPI/UTR payment
+                  </label>
+                  <input value={paymentSettings.receiver_name} onChange={event => setPaymentSettings({ ...paymentSettings, receiver_name: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="Receiver name" />
+                  <input value={paymentSettings.upi_id} onChange={event => setPaymentSettings({ ...paymentSettings, upi_id: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="UPI ID, for example name@bank" />
+                  <textarea value={paymentSettings.instructions} onChange={event => setPaymentSettings({ ...paymentSettings, instructions: event.target.value })} className="rounded-lg border border-green-300 px-3 py-2 text-sm" placeholder="Payment instructions shown to students" />
+                  <p className="rounded-lg bg-yellow-50 p-3 text-xs font-bold text-yellow-800">
+                    Razorpay is hidden until real Razorpay integration/keys are configured. Manual payment requires admin verification.
+                  </p>
+                  <button className="rounded-lg bg-green-800 px-4 py-2 text-sm font-black text-white">Save Payment Setup</button>
+                </form>
+              )}
+            </section>
+          </div>
+
           <div className="mb-4 overflow-hidden rounded-lg border border-green-200 bg-white shadow-sm">
             <div className="flex flex-col gap-1 border-b border-green-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
               <h2 className="text-lg font-black text-green-950">Shops And Revenue</h2>
-              <p className="text-xs font-bold text-green-700">{activeShops.length} active · {approvedShops.length} approved</p>
+              <p className="text-xs font-bold text-green-700">{activeShops.length} active · {approvedShops.length} approved · {shops.length} total</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-green-50">
                   <tr>
-                    {['Shop', 'Approval', 'Present', 'Status', 'Orders', 'Revenue'].map(column => (
+                    {['Shop', 'Approval', 'Present', 'Status', 'Orders', 'Revenue', 'Action'].map(column => (
                       <th key={column} className="px-4 py-2 text-left text-xs font-black uppercase text-green-800">{column}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {approvedShops.map(shop => (
+                  {shops.map(shop => (
                     <tr key={shop.id} className="border-t border-green-100">
                       <td className="px-4 py-3 font-black text-green-950">{shop.name}</td>
                       <td className="px-4 py-3 text-green-800">{shop.approval_status}</td>
@@ -261,6 +365,9 @@ export function AdminDashboard() {
                       <td className="px-4 py-3 text-green-800">{shop.status}</td>
                       <td className="px-4 py-3 text-green-800">{shop.orders_today}</td>
                       <td className="px-4 py-3 font-black text-yellow-700">{money(shop.revenue_today)}</td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => startEditShop(shop)} className="rounded-lg border border-green-700 px-3 py-1 text-xs font-black text-green-800">Edit</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

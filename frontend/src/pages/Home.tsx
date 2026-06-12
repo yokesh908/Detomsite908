@@ -33,7 +33,7 @@ export function Home() {
   useEffect(() => {
     void Promise.all([
       api.get<BackendSummary>('/local/summary'),
-      api.get<LocalShop[]>('/local/shops'),
+      api.get<LocalShop[]>('/local/shops', { params: { public_only: true } }),
       api.get<LocalProduct[]>('/local/products'),
       api.get<LocalOrder[]>('/local/orders'),
     ]).then(([summaryResponse, shopsResponse, productsResponse, ordersResponse]) => {
@@ -54,7 +54,8 @@ export function Home() {
     `${shop.name} ${shop.category}`.toLowerCase().includes(search.toLowerCase())
   ))
 
-  const topProducts = products.slice(0, 6)
+  const publicShopIds = new Set(shops.map(shop => shop.id))
+  const topProducts = products.filter(product => publicShopIds.has(product.shop_id)).slice(0, 6)
 
   return (
     <MainLayout>
@@ -165,6 +166,11 @@ export function Home() {
                   </div>
                 </Link>
               ))}
+              {filteredShops.length === 0 && (
+                <div className="rounded-lg border-2 border-yellow-500 bg-white p-8 text-center font-black text-green-950 md:col-span-2 lg:col-span-4">
+                  No approved open shops are available right now.
+                </div>
+              )}
             </div>
           </section>
         </div>
