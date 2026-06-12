@@ -8,6 +8,7 @@ __pycache__/
 .coverage
 htmlcov/
 *.db
+.vercel/
 
 node_modules/
 dist/
